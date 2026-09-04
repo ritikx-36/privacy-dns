@@ -2,8 +2,7 @@ import socket
 import dns.message
 import dns.rcode
 
-from filter import load_domains, check_domain
-
+from filter import load_domains, load_filter_directory, check_domain
 
 server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -15,16 +14,14 @@ print("DNS server running on 127.0.0.1:8053")
 # Load allowlist
 allowed_domains = load_domains("allowlist.txt")
 
-
-# Load blocklists
+# Load blocklist
 blocked_domains = load_domains("blocklist.txt")
 
-ads = load_domains("filters/ads.txt")
-trackers = load_domains("filters/trackers.txt")
-
+# Load all filter files
+filter_domains = load_filter_directory("filters")
 
 # Combine all blocked domains
-blocked_domains = blocked_domains | ads | trackers
+blocked_domains.update(filter_domains)
 
 
 while True:

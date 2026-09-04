@@ -1,3 +1,6 @@
+import os
+
+
 def load_domains(filename):
 
     domains = set()
@@ -12,6 +15,23 @@ def load_domains(filename):
                 domains.add(domain)
 
     return domains
+
+
+def load_filter_directory(directory):
+
+    blocked_domains = set()
+
+    for filename in os.listdir(directory):
+
+        if filename.endswith(".txt"):
+
+            filepath = os.path.join(directory, filename)
+
+            domains = load_domains(filepath)
+
+            blocked_domains.update(domains)
+
+    return blocked_domains
 
 
 def matches(domain, rules):
