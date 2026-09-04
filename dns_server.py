@@ -2,6 +2,9 @@ import socket
 import dns.message
 import dns.rcode
 
+from filter import load_domains, check_domain
+
+
 server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 server.bind(("127.0.0.1", 8053))
@@ -9,26 +12,9 @@ server.bind(("127.0.0.1", 8053))
 print("DNS server running on 127.0.0.1:8053")
 
 
-# Load blocklist
-blocked_domains = set()
-
-with open("blocklist.txt", "r") as file:
-    for line in file:
-        domain = line.strip().lower()
-
-        if domain:
-            blocked_domains.add(domain)
-
-
-# Load allowlist
-allowed_domains = set()
-
-with open("allowlist.txt", "r") as file:
-    for line in file:
-        domain = line.strip().lower()
-
-        if domain:
-            allowed_domains.add(domain)
+# Load filtering rules
+blocked_domains = load_domains("blocklist.txt")
+allowed_domains = load_domains("allowlist.txt")
 
 
 while True:
@@ -42,6 +28,7 @@ while True:
     domain = ""
 
     while data[i] != 0:
+
         length = data[i]
 
         i += 1
@@ -57,60 +44,35 @@ while True:
     print("Domain:", domain)
 
 
-    # Check allowlist first
-    allowed = False
-
-    for allowed_domain in allowed_domains:
-
-        if domain == allowed_domain:
-            allowed = True
-            break
-
-        if domain.endswith("." + allowed_domain):
-            allowed = True
-            break
+    # Ask the rule engine for a decision
+    result = check_domain(
+        domain,
+        allowed_domains,
+        blocked_domains
+    )
 
 
-    if allowed:
+    # Block domain
+    if result == "BLOCK":
 
-        print("ALLOWLISTED:", domain)
+        print("BLOCKED:", domain)
 
-    else:
+        query = dns.message.from_wire(data)
 
-        # Check blocklist
-        blocked = False
+        response = dns.message.make_response(query)
 
-        for blocked_domain in blocked_domains:
+        response.set_rcode(dns.rcode.NXDOMAIN)
 
-            if domain == blocked_domain:
-                blocked = True
-                break
+        server.sendto(response.to_wire(), address)
 
-            if domain.endswith("." + blocked_domain):
-                blocked = True
-                break
+        continue
 
 
-        # Block domain
-        if blocked:
-
-            print("BLOCKED:", domain)
-
-            query = dns.message.from_wire(data)
-
-            response = dns.message.make_response(query)
-
-            response.set_rcode(dns.rcode.NXDOMAIN)
-
-            server.sendto(response.to_wire(), address)
-
-            continue
+    # Allow domain
+    print("ALLOWED:", domain)
 
 
-        print("ALLOWED:", domain)
-
-
-    # Forward allowed request
+    # Forward allowed request to upstream DNS
     upstream = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     upstream.settimeout(3)
