@@ -20,6 +20,17 @@ with open("blocklist.txt", "r") as file:
             blocked_domains.add(domain)
 
 
+# Load allowlist
+allowed_domains = set()
+
+with open("allowlist.txt", "r") as file:
+    for line in file:
+        domain = line.strip().lower()
+
+        if domain:
+            allowed_domains.add(domain)
+
+
 while True:
 
     data, address = server.recvfrom(512)
@@ -46,39 +57,60 @@ while True:
     print("Domain:", domain)
 
 
-    # Check blocklist
-    blocked = False
+    # Check allowlist first
+    allowed = False
 
-    for blocked_domain in blocked_domains:
+    for allowed_domain in allowed_domains:
 
-        if domain == blocked_domain:
-            blocked = True
+        if domain == allowed_domain:
+            allowed = True
             break
 
-        if domain.endswith("." + blocked_domain):
-            blocked = True
+        if domain.endswith("." + allowed_domain):
+            allowed = True
             break
 
 
-    # Block domain
-    if blocked:
+    if allowed:
 
-        print("BLOCKED:", domain)
+        print("ALLOWLISTED:", domain)
 
-        query = dns.message.from_wire(data)
+    else:
 
-        response = dns.message.make_response(query)
+        # Check blocklist
+        blocked = False
 
-        response.set_rcode(dns.rcode.NXDOMAIN)
+        for blocked_domain in blocked_domains:
 
-        server.sendto(response.to_wire(), address)
+            if domain == blocked_domain:
+                blocked = True
+                break
 
-        continue
+            if domain.endswith("." + blocked_domain):
+                blocked = True
+                break
 
 
-    # Allow domain
-    print("ALLOWED:", domain)
+        # Block domain
+        if blocked:
 
+            print("BLOCKED:", domain)
+
+            query = dns.message.from_wire(data)
+
+            response = dns.message.make_response(query)
+
+            response.set_rcode(dns.rcode.NXDOMAIN)
+
+            server.sendto(response.to_wire(), address)
+
+            continue
+
+
+        print("ALLOWED:", domain)
+
+
+    # Forward allowed request
     upstream = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     upstream.settimeout(3)
