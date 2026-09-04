@@ -63,11 +63,20 @@ while True:
 
 
     # Parse DNS query
-    query = dns.message.from_wire(data)
+    try:
 
-    query_type = dns.rdatatype.to_text(
-        query.question[0].rdtype
-    )
+        query = dns.message.from_wire(data)
+
+        query_type = dns.rdatatype.to_text(
+            query.question[0].rdtype
+        )
+
+    except Exception:
+
+        print("Invalid DNS request")
+
+        continue
+
 
     print("Query type:", query_type)
 
@@ -135,35 +144,61 @@ while True:
 
     upstream.settimeout(3)
 
-    upstream.sendto(
-        data,
-        ("1.1.1.1", 53)
-    )
 
-    response, _ = upstream.recvfrom(512)
+    try:
+
+        upstream.sendto(
+            data,
+            ("1.1.1.1", 53)
+        )
+
+        response, _ = upstream.recvfrom(512)
+
+    except socket.timeout:
+
+        print("UPSTREAM DNS TIMEOUT:", domain)
+
+        upstream.close()
+
+        continue
+
+    except OSError as error:
+
+        print("UPSTREAM DNS ERROR:", error)
+
+        upstream.close()
+
+        continue
+
 
     upstream.close()
 
 
     # Read actual TTL from DNS response
-    dns_response = dns.message.from_wire(response)
+    try:
 
-    ttl = 60
+        dns_response = dns.message.from_wire(response)
 
-    if dns_response.answer:
+        ttl = 60
 
-        ttl = dns_response.answer[0].ttl
+        if dns_response.answer:
 
-    print("TTL:", ttl)
+            ttl = dns_response.answer[0].ttl
+
+        print("TTL:", ttl)
 
 
-    # Store response in cache
-    set_cache(
-        domain,
-        query_type,
-        response,
-        ttl
-    )
+        # Store response in cache
+        set_cache(
+            domain,
+            query_type,
+            response,
+            ttl
+        )
+
+    except Exception:
+
+        print("Invalid response from upstream")
 
 
     # Send response to client
