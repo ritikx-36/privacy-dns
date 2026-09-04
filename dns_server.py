@@ -1,6 +1,7 @@
 import socket
 import dns.message
 import dns.rcode
+import dns.rdatatype
 
 from filter import load_domains, load_filter_directory, check_domain
 from cache import set_cache, get_cache
@@ -57,6 +58,16 @@ while True:
     print("Domain:", domain)
 
 
+    # Parse DNS query
+    query = dns.message.from_wire(data)
+
+    query_type = dns.rdatatype.to_text(
+        query.question[0].rdtype
+    )
+
+    print("Query type:", query_type)
+
+
     # Check filtering rules
     result = check_domain(
         domain,
@@ -70,36 +81,46 @@ while True:
 
         print("BLOCKED:", domain)
 
-        query = dns.message.from_wire(data)
-
         response = dns.message.make_response(query)
 
         response.set_rcode(dns.rcode.NXDOMAIN)
 
-        server.sendto(response.to_wire(), address)
+        server.sendto(
+            response.to_wire(),
+            address
+        )
 
         continue
 
 
     # Check cache
-    cached_response = get_cache(domain)
+    cached_response = get_cache(
+        domain,
+        query_type
+    )
 
 
     if cached_response is not None:
 
-        print("CACHE HIT:", domain)
+        print("CACHE HIT:", domain, query_type)
 
         # Replace cached transaction ID
         # with current request ID
-        cached_response = data[:2] + cached_response[2:]
+        cached_response = (
+            data[:2] +
+            cached_response[2:]
+        )
 
-        server.sendto(cached_response, address)
+        server.sendto(
+            cached_response,
+            address
+        )
 
         continue
 
 
     # Cache miss
-    print("CACHE MISS:", domain)
+    print("CACHE MISS:", domain, query_type)
 
 
     # Forward request to upstream DNS
@@ -129,17 +150,20 @@ while True:
 
         ttl = dns_response.answer[0].ttl
 
-
     print("TTL:", ttl)
 
 
     # Store response in cache
     set_cache(
         domain,
+        query_type,
         response,
         ttl
     )
 
 
     # Send response to client
-    server.sendto(response, address)
+    server.sendto(
+        response,
+        address
+    )
