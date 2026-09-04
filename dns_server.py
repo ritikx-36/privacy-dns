@@ -3,6 +3,8 @@ import dns.message
 import dns.rcode
 
 from filter import load_domains, load_filter_directory, check_domain
+from cache import set_cache, get_cache
+
 
 server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -13,6 +15,7 @@ print("DNS server running on 127.0.0.1:8053")
 
 # Load allowlist
 allowed_domains = load_domains("allowlist.txt")
+
 
 # Load blocklist
 blocked_domains = load_domains("blocklist.txt")
@@ -54,7 +57,7 @@ while True:
     print("Domain:", domain)
 
 
-    # Ask the rule engine
+    # Check filtering rules
     result = check_domain(
         domain,
         allowed_domains,
@@ -78,11 +81,28 @@ while True:
         continue
 
 
-    # Allow domain
-    print("ALLOWED:", domain)
+    # Check cache
+    cached_response = get_cache(domain)
 
 
-    # Forward allowed request
+    if cached_response is not None:
+
+        print("CACHE HIT:", domain)
+
+        # Replace cached transaction ID
+        # with current request ID
+        cached_response = data[:2] + cached_response[2:]
+
+        server.sendto(cached_response, address)
+
+        continue
+
+
+    # Cache miss
+    print("CACHE MISS:", domain)
+
+
+    # Forward request to upstream DNS
     upstream = socket.socket(
         socket.AF_INET,
         socket.SOCK_DGRAM
@@ -97,6 +117,29 @@ while True:
 
     response, _ = upstream.recvfrom(512)
 
-    server.sendto(response, address)
-
     upstream.close()
+
+
+    # Read actual TTL from DNS response
+    dns_response = dns.message.from_wire(response)
+
+    ttl = 60
+
+    if dns_response.answer:
+
+        ttl = dns_response.answer[0].ttl
+
+
+    print("TTL:", ttl)
+
+
+    # Store response in cache
+    set_cache(
+        domain,
+        response,
+        ttl
+    )
+
+
+    # Send response to client
+    server.sendto(response, address)
