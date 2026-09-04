@@ -1,7 +1,10 @@
 import time
+import threading
 
 
 cache = {}
+
+cache_lock = threading.Lock()
 
 
 def set_cache(domain, query_type, response, ttl):
@@ -10,28 +13,32 @@ def set_cache(domain, query_type, response, ttl):
 
     expires_at = time.time() + ttl
 
-    cache[key] = {
-        "response": response,
-        "expires_at": expires_at
-    }
+    with cache_lock:
+
+        cache[key] = {
+            "response": response,
+            "expires_at": expires_at
+        }
 
 
 def get_cache(domain, query_type):
 
     key = (domain, query_type)
 
-    if key not in cache:
-        return None
+    with cache_lock:
 
-    entry = cache[key]
+        if key not in cache:
+            return None
 
-    if time.time() >= entry["expires_at"]:
+        entry = cache[key]
 
-        del cache[key]
+        if time.time() >= entry["expires_at"]:
 
-        return None
+            del cache[key]
 
-    return entry["response"]
+            return None
+
+        return entry["response"]
 
 
 def cleanup_cache():
@@ -40,11 +47,13 @@ def cleanup_cache():
 
     expired_keys = []
 
-    for key, entry in cache.items():
+    with cache_lock:
 
-        if current_time >= entry["expires_at"]:
-            expired_keys.append(key)
+        for key, entry in cache.items():
 
-    for key in expired_keys:
+            if current_time >= entry["expires_at"]:
+                expired_keys.append(key)
 
-        del cache[key]
+        for key in expired_keys:
+
+            del cache[key]

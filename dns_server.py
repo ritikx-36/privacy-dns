@@ -1,4 +1,6 @@
 import socket
+from concurrent.futures import ThreadPoolExecutor
+
 import dns.message
 import dns.rcode
 import dns.rdatatype
@@ -28,9 +30,7 @@ filter_domains = load_filter_directory("filters")
 blocked_domains.update(filter_domains)
 
 
-while True:
-
-    data, address = server.recvfrom(4096)
+def handle_request(data, address):
 
     print("Received DNS request from:", address)
 
@@ -48,7 +48,7 @@ while True:
 
         print("Invalid DNS request")
 
-        continue
+        return
 
 
     # Extract domain
@@ -62,7 +62,7 @@ while True:
 
         print("Could not extract domain")
 
-        continue
+        return
 
 
     print("Domain:", domain)
@@ -79,7 +79,7 @@ while True:
 
         print("Could not determine query type")
 
-        continue
+        return
 
 
     print("Query type:", query_type)
@@ -107,7 +107,7 @@ while True:
             address
         )
 
-        continue
+        return
 
 
     # Check cache
@@ -133,7 +133,7 @@ while True:
             address
         )
 
-        continue
+        return
 
 
     # Cache miss
@@ -162,7 +162,6 @@ while True:
 
         print("UPSTREAM DNS TIMEOUT:", domain)
 
-        # Return SERVFAIL to client
         response = dns.message.make_response(query)
 
         response.set_rcode(dns.rcode.SERVFAIL)
@@ -174,13 +173,12 @@ while True:
 
         upstream.close()
 
-        continue
+        return
 
     except OSError as error:
 
         print("UPSTREAM DNS ERROR:", error)
 
-        # Return SERVFAIL to client
         response = dns.message.make_response(query)
 
         response.set_rcode(dns.rcode.SERVFAIL)
@@ -192,7 +190,7 @@ while True:
 
         upstream.close()
 
-        continue
+        return
 
 
     upstream.close()
@@ -228,5 +226,20 @@ while True:
     # Send response to client
     server.sendto(
         response,
+        address
+    )
+
+
+# Create a pool of worker threads
+executor = ThreadPoolExecutor(max_workers=10)
+
+
+while True:
+
+    data, address = server.recvfrom(4096)
+
+    executor.submit(
+        handle_request,
+        data,
         address
     )
