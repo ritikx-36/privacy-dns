@@ -1,8 +1,9 @@
-import dns.message
-import dns.query
+import socket
 
-query = dns.message.make_query("google.com", "A")
+server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-response = dns.query.udp(query, "1.1.1.1")
+server.settimeout(3)
 
-print(response)
+data = b""
+
+server.sendto(data, ("1.1.1.1", 53))
