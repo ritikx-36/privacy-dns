@@ -4,7 +4,7 @@ import dns.rcode
 import dns.rdatatype
 
 from filter import load_domains, load_filter_directory, check_domain
-from cache import set_cache, get_cache
+from cache import set_cache, get_cache, cleanup_cache
 
 
 server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -33,6 +33,10 @@ while True:
     data, address = server.recvfrom(512)
 
     print("Received DNS request from:", address)
+
+
+    # Clean expired cache entries
+    cleanup_cache()
 
 
     # DNS header = 12 bytes

@@ -32,3 +32,19 @@ def get_cache(domain, query_type):
         return None
 
     return entry["response"]
+
+
+def cleanup_cache():
+
+    current_time = time.time()
+
+    expired_keys = []
+
+    for key, entry in cache.items():
+
+        if current_time >= entry["expires_at"]:
+            expired_keys.append(key)
+
+    for key in expired_keys:
+
+        del cache[key]
