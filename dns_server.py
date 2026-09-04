@@ -45,8 +45,24 @@ while True:
 
     print("Domain:", domain)
 
+
     # Check blocklist
-    if domain in blocked_domains:
+    blocked = False
+
+    for blocked_domain in blocked_domains:
+
+        if domain == blocked_domain:
+            blocked = True
+            break
+
+        if domain.endswith("." + blocked_domain):
+            blocked = True
+            break
+
+
+    # Block domain
+    if blocked:
+
         print("BLOCKED:", domain)
 
         query = dns.message.from_wire(data)
@@ -59,10 +75,12 @@ while True:
 
         continue
 
+
+    # Allow domain
     print("ALLOWED:", domain)
 
-    # Forward allowed request
     upstream = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
     upstream.settimeout(3)
 
     upstream.sendto(data, ("1.1.1.1", 53))
