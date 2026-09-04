@@ -30,7 +30,7 @@ blocked_domains.update(filter_domains)
 
 while True:
 
-    data, address = server.recvfrom(512)
+    data, address = server.recvfrom(4096)
 
     print("Received DNS request from:", address)
 
@@ -39,33 +39,37 @@ while True:
     cleanup_cache()
 
 
-    # DNS header = 12 bytes
-    i = 12
-    domain = ""
-
-
-    while data[i] != 0:
-
-        length = data[i]
-
-        i += 1
-
-        domain += data[i:i + length].decode()
-
-        i += length
-
-        domain += "."
-
-
-    domain = domain.rstrip(".").lower()
-
-    print("Domain:", domain)
-
-
     # Parse DNS query
     try:
 
         query = dns.message.from_wire(data)
+
+    except Exception:
+
+        print("Invalid DNS request")
+
+        continue
+
+
+    # Extract domain
+    try:
+
+        domain = query.question[0].name.to_text()
+
+        domain = domain.rstrip(".").lower()
+
+    except Exception:
+
+        print("Could not extract domain")
+
+        continue
+
+
+    print("Domain:", domain)
+
+
+    # Extract query type
+    try:
 
         query_type = dns.rdatatype.to_text(
             query.question[0].rdtype
@@ -73,7 +77,7 @@ while True:
 
     except Exception:
 
-        print("Invalid DNS request")
+        print("Could not determine query type")
 
         continue
 
@@ -152,11 +156,21 @@ while True:
             ("1.1.1.1", 53)
         )
 
-        response, _ = upstream.recvfrom(512)
+        response, _ = upstream.recvfrom(4096)
 
     except socket.timeout:
 
         print("UPSTREAM DNS TIMEOUT:", domain)
+
+        # Return SERVFAIL to client
+        response = dns.message.make_response(query)
+
+        response.set_rcode(dns.rcode.SERVFAIL)
+
+        server.sendto(
+            response.to_wire(),
+            address
+        )
 
         upstream.close()
 
@@ -165,6 +179,16 @@ while True:
     except OSError as error:
 
         print("UPSTREAM DNS ERROR:", error)
+
+        # Return SERVFAIL to client
+        response = dns.message.make_response(query)
+
+        response.set_rcode(dns.rcode.SERVFAIL)
+
+        server.sendto(
+            response.to_wire(),
+            address
+        )
 
         upstream.close()
 
