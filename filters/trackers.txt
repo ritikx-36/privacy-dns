@@ -1,0 +1,4 @@
+# Tracking domains
+
+tracker.example.com
+google-analytics.com

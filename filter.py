@@ -8,7 +8,7 @@ def load_domains(filename):
 
             domain = line.strip().lower()
 
-            if domain:
+            if domain and not domain.startswith("#"):
                 domains.add(domain)
 
     return domains

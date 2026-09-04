@@ -1,0 +1,4 @@
+# Advertising domains
+
+ads.example.com
+doubleclick.net

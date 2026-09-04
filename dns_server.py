@@ -12,9 +12,19 @@ server.bind(("127.0.0.1", 8053))
 print("DNS server running on 127.0.0.1:8053")
 
 
-# Load filtering rules
-blocked_domains = load_domains("blocklist.txt")
+# Load allowlist
 allowed_domains = load_domains("allowlist.txt")
+
+
+# Load blocklists
+blocked_domains = load_domains("blocklist.txt")
+
+ads = load_domains("filters/ads.txt")
+trackers = load_domains("filters/trackers.txt")
+
+
+# Combine all blocked domains
+blocked_domains = blocked_domains | ads | trackers
 
 
 while True:
@@ -23,9 +33,11 @@ while True:
 
     print("Received DNS request from:", address)
 
+
     # DNS header = 12 bytes
     i = 12
     domain = ""
+
 
     while data[i] != 0:
 
@@ -39,12 +51,13 @@ while True:
 
         domain += "."
 
+
     domain = domain.rstrip(".").lower()
 
     print("Domain:", domain)
 
 
-    # Ask the rule engine for a decision
+    # Ask the rule engine
     result = check_domain(
         domain,
         allowed_domains,
@@ -72,12 +85,18 @@ while True:
     print("ALLOWED:", domain)
 
 
-    # Forward allowed request to upstream DNS
-    upstream = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # Forward allowed request
+    upstream = socket.socket(
+        socket.AF_INET,
+        socket.SOCK_DGRAM
+    )
 
     upstream.settimeout(3)
 
-    upstream.sendto(data, ("1.1.1.1", 53))
+    upstream.sendto(
+        data,
+        ("1.1.1.1", 53)
+    )
 
     response, _ = upstream.recvfrom(512)
 
