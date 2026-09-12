@@ -1,2 +1,9 @@
+# Video platforms
 youtube.com
+
+# Example advertising domains
+ads.example.com
+
+# Example tracker domains
+tracker.example.com
 
