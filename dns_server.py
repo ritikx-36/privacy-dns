@@ -5,15 +5,26 @@ import dns.message
 import dns.rcode
 import dns.rdatatype
 
+from config import (
+    SERVER_HOST,
+    SERVER_PORT,
+    UPSTREAM_DNS,
+    BUFFER_SIZE,
+    UPSTREAM_TIMEOUT,
+    MAX_WORKERS
+)
+
 from filter import load_domains, load_filter_directory, check_domain
 from cache import set_cache, get_cache, cleanup_cache
 
 
 server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-server.bind(("127.0.0.1", 8053))
+server.bind((SERVER_HOST, SERVER_PORT))
 
-print("DNS server running on 127.0.0.1:8053")
+print(
+    f"DNS server running on {SERVER_HOST}:{SERVER_PORT}"
+)
 
 
 # Load allowlist
@@ -33,7 +44,6 @@ blocked_domains.update(filter_domains)
 def handle_request(data, address):
 
     print("Received DNS request from:", address)
-
 
     # Clean expired cache entries
     cleanup_cache()
@@ -100,7 +110,9 @@ def handle_request(data, address):
 
         response = dns.message.make_response(query)
 
-        response.set_rcode(dns.rcode.NXDOMAIN)
+        response.set_rcode(
+            dns.rcode.NXDOMAIN
+        )
 
         server.sendto(
             response.to_wire(),
@@ -119,7 +131,11 @@ def handle_request(data, address):
 
     if cached_response is not None:
 
-        print("CACHE HIT:", domain, query_type)
+        print(
+            "CACHE HIT:",
+            domain,
+            query_type
+        )
 
         # Replace cached transaction ID
         # with current request ID
@@ -137,34 +153,51 @@ def handle_request(data, address):
 
 
     # Cache miss
-    print("CACHE MISS:", domain, query_type)
+    print(
+        "CACHE MISS:",
+        domain,
+        query_type
+    )
 
 
-    # Forward request to upstream DNS
+    # Create upstream socket
     upstream = socket.socket(
         socket.AF_INET,
         socket.SOCK_DGRAM
     )
 
-    upstream.settimeout(3)
+    upstream.settimeout(
+        UPSTREAM_TIMEOUT
+    )
 
 
     try:
 
         upstream.sendto(
             data,
-            ("1.1.1.1", 53)
+            UPSTREAM_DNS
         )
 
-        response, _ = upstream.recvfrom(4096)
+        response, _ = upstream.recvfrom(
+            BUFFER_SIZE
+        )
+
 
     except socket.timeout:
 
-        print("UPSTREAM DNS TIMEOUT:", domain)
+        print(
+            "UPSTREAM DNS TIMEOUT:",
+            domain
+        )
 
-        response = dns.message.make_response(query)
+        # Return SERVFAIL
+        response = dns.message.make_response(
+            query
+        )
 
-        response.set_rcode(dns.rcode.SERVFAIL)
+        response.set_rcode(
+            dns.rcode.SERVFAIL
+        )
 
         server.sendto(
             response.to_wire(),
@@ -175,13 +208,22 @@ def handle_request(data, address):
 
         return
 
+
     except OSError as error:
 
-        print("UPSTREAM DNS ERROR:", error)
+        print(
+            "UPSTREAM DNS ERROR:",
+            error
+        )
 
-        response = dns.message.make_response(query)
+        # Return SERVFAIL
+        response = dns.message.make_response(
+            query
+        )
 
-        response.set_rcode(dns.rcode.SERVFAIL)
+        response.set_rcode(
+            dns.rcode.SERVFAIL
+        )
 
         server.sendto(
             response.to_wire(),
@@ -199,7 +241,9 @@ def handle_request(data, address):
     # Read actual TTL from DNS response
     try:
 
-        dns_response = dns.message.from_wire(response)
+        dns_response = dns.message.from_wire(
+            response
+        )
 
         ttl = 60
 
@@ -218,9 +262,12 @@ def handle_request(data, address):
             ttl
         )
 
+
     except Exception:
 
-        print("Invalid response from upstream")
+        print(
+            "Invalid response from upstream"
+        )
 
 
     # Send response to client
@@ -230,13 +277,17 @@ def handle_request(data, address):
     )
 
 
-# Create a pool of worker threads
-executor = ThreadPoolExecutor(max_workers=10)
+# Create worker pool
+executor = ThreadPoolExecutor(
+    max_workers=MAX_WORKERS
+)
 
 
 while True:
 
-    data, address = server.recvfrom(4096)
+    data, address = server.recvfrom(
+        BUFFER_SIZE
+    )
 
     executor.submit(
         handle_request,
