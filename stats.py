@@ -1,3 +1,4 @@
+import json
 import threading
 
 
@@ -25,3 +26,13 @@ def get_stats():
     with stats_lock:
 
         return stats.copy()
+
+
+def get_stats_json():
+
+    with stats_lock:
+
+        return json.dumps(
+            stats,
+            indent=4
+        )
