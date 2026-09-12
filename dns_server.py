@@ -14,13 +14,32 @@ from config import (
     MAX_WORKERS
 )
 
-from filter import load_domains, load_filter_directory, check_domain
-from cache import set_cache, get_cache, cleanup_cache
+from filter import (
+    load_domains,
+    load_filter_directory,
+    check_domain
+)
+
+from cache import (
+    set_cache,
+    get_cache,
+    cleanup_cache
+)
+
+from stats import (
+    increment,
+    get_stats
+)
 
 
-server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+server = socket.socket(
+    socket.AF_INET,
+    socket.SOCK_DGRAM
+)
 
-server.bind((SERVER_HOST, SERVER_PORT))
+server.bind(
+    (SERVER_HOST, SERVER_PORT)
+)
 
 print(
     f"DNS server running on {SERVER_HOST}:{SERVER_PORT}"
@@ -28,22 +47,39 @@ print(
 
 
 # Load allowlist
-allowed_domains = load_domains("allowlist.txt")
+allowed_domains = load_domains(
+    "allowlist.txt"
+)
 
 
 # Load blocklist
-blocked_domains = load_domains("blocklist.txt")
+blocked_domains = load_domains(
+    "blocklist.txt"
+)
+
 
 # Load all filter files
-filter_domains = load_filter_directory("filters")
+filter_domains = load_filter_directory(
+    "filters"
+)
+
 
 # Combine all blocked domains
-blocked_domains.update(filter_domains)
+blocked_domains.update(
+    filter_domains
+)
 
 
 def handle_request(data, address):
 
-    print("Received DNS request from:", address)
+    print(
+        "Received DNS request from:",
+        address
+    )
+
+    # Count every DNS request
+    increment("total_queries")
+
 
     # Clean expired cache entries
     cleanup_cache()
@@ -52,11 +88,15 @@ def handle_request(data, address):
     # Parse DNS query
     try:
 
-        query = dns.message.from_wire(data)
+        query = dns.message.from_wire(
+            data
+        )
 
     except Exception:
 
-        print("Invalid DNS request")
+        print(
+            "Invalid DNS request"
+        )
 
         return
 
@@ -70,12 +110,17 @@ def handle_request(data, address):
 
     except Exception:
 
-        print("Could not extract domain")
+        print(
+            "Could not extract domain"
+        )
 
         return
 
 
-    print("Domain:", domain)
+    print(
+        "Domain:",
+        domain
+    )
 
 
     # Extract query type
@@ -87,12 +132,17 @@ def handle_request(data, address):
 
     except Exception:
 
-        print("Could not determine query type")
+        print(
+            "Could not determine query type"
+        )
 
         return
 
 
-    print("Query type:", query_type)
+    print(
+        "Query type:",
+        query_type
+    )
 
 
     # Check filtering rules
@@ -106,9 +156,18 @@ def handle_request(data, address):
     # Block domain
     if result == "BLOCK":
 
-        print("BLOCKED:", domain)
+        print(
+            "BLOCKED:",
+            domain
+        )
 
-        response = dns.message.make_response(query)
+        increment(
+            "blocked_queries"
+        )
+
+        response = dns.message.make_response(
+            query
+        )
 
         response.set_rcode(
             dns.rcode.NXDOMAIN
@@ -137,6 +196,10 @@ def handle_request(data, address):
             query_type
         )
 
+        increment(
+            "cache_hits"
+        )
+
         # Replace cached transaction ID
         # with current request ID
         cached_response = (
@@ -157,6 +220,10 @@ def handle_request(data, address):
         "CACHE MISS:",
         domain,
         query_type
+    )
+
+    increment(
+        "cache_misses"
     )
 
 
@@ -190,6 +257,10 @@ def handle_request(data, address):
             domain
         )
 
+        increment(
+            "upstream_failures"
+        )
+
         # Return SERVFAIL
         response = dns.message.make_response(
             query
@@ -214,6 +285,10 @@ def handle_request(data, address):
         print(
             "UPSTREAM DNS ERROR:",
             error
+        )
+
+        increment(
+            "upstream_failures"
         )
 
         # Return SERVFAIL
@@ -251,7 +326,10 @@ def handle_request(data, address):
 
             ttl = dns_response.answer[0].ttl
 
-        print("TTL:", ttl)
+        print(
+            "TTL:",
+            ttl
+        )
 
 
         # Store response in cache
@@ -275,6 +353,36 @@ def handle_request(data, address):
         response,
         address
     )
+
+
+def print_statistics():
+
+    current_stats = get_stats()
+
+    print()
+    print("DNS Statistics")
+    print("--------------------")
+    print(
+        "Total queries:",
+        current_stats["total_queries"]
+    )
+    print(
+        "Blocked queries:",
+        current_stats["blocked_queries"]
+    )
+    print(
+        "Cache hits:",
+        current_stats["cache_hits"]
+    )
+    print(
+        "Cache misses:",
+        current_stats["cache_misses"]
+    )
+    print(
+        "Upstream failures:",
+        current_stats["upstream_failures"]
+    )
+    print()
 
 
 # Create worker pool
